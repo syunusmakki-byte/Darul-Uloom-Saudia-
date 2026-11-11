@@ -1,0 +1,127 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Darul Uloom Saudia Attendance</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f2f6f3;margin:0;padding:15px;color:#173c30}
+main{max-width:600px;margin:auto}
+header{background:#12563e;color:white;padding:22px;text-align:center;border-radius:14px}
+h1{font-size:22px;margin:8px 0}
+.card{background:white;padding:18px;margin-top:15px;border-radius:14px}
+select,input,button{width:100%;padding:14px;margin:8px 0;font-size:16px;box-sizing:border-box;border-radius:9px}
+select,input{border:1px solid #bbb}
+button{background:#16734e;color:white;border:0;font-weight:bold}
+button:disabled{opacity:.5}
+#message{padding:12px;background:#eef3ef;border-radius:8px}
+.record{border-bottom:1px solid #ddd;padding:12px 0}
+small{color:#666}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div dir="rtl" style="font-size:27px">دار العلوم سعودية</div>
+<h1>Darul Uloom Saudia</h1>
+Teacher Attendance
+</header>
+
+<div class="card">
+<label>Select Teacher</label>
+<select id="teacher">
+<option value="">Loading teachers...</option>
+</select>
+
+<label>Select Actual Attendance Time</label>
+<input type="time" id="time">
+
+<button onclick="mark('Morning IN')">Morning IN – 7:45 AM</button>
+<button onclick="mark('Morning OUT')">Morning OUT – 12:20 PM</button>
+<button onclick="mark('Afternoon IN')">Afternoon IN – 2:20 PM</button>
+<button onclick="mark('Afternoon OUT')">Afternoon OUT – 4:30 PM</button>
+
+<p id="message">Connecting...</p>
+</div>
+
+<div class="card">
+<h3>Recent Attendance</h3>
+<div id="records">Loading...</div>
+</div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const db=window.supabase.createClient(
+"https://cukkqggyflfdhfqjfqbt.supabase.co",
+"sb_publishable_qLdRBDsapReyqzPgVJEaVg_BJuHksvs"
+);
+
+const teacher=document.getElementById("teacher");
+const time=document.getElementById("time");
+const message=document.getElementById("message");
+const records=document.getElementById("records");
+
+function isFriday(){
+return new Intl.DateTimeFormat("en-US",{
+timeZone:"Asia/Kolkata",weekday:"short"
+}).format(new Date())==="Fri";
+}
+
+async function loadTeachers(){
+const {data,error}=await db.from("teachers")
+.select("id,name").eq("active",true).order("id");
+if(error){message.textContent=error.message;return;}
+teacher.innerHTML='<option value="">Select Teacher</option>';
+data.forEach(t=>{
+const o=document.createElement("option");
+o.value=t.id;o.textContent=t.name;teacher.appendChild(o);
+});
+message.textContent=isFriday()?"Friday Holiday":"Ready";
+}
+
+async function mark(slot){
+if(isFriday()){message.textContent="Friday Holiday";return;}
+if(!teacher.value||!time.value){
+message.textContent="Select teacher and time first";return;
+}
+const buttons=document.querySelectorAll("button");
+buttons.forEach(b=>b.disabled=true);
+const {error}=await db.from("attendance_entries").insert({
+teacher_id:Number(teacher.value),
+session_slot:slot,
+attendance_time:time.value
+});
+message.textContent=error
+?error.code==="23505"?"Already marked for this slot":error.message
+:"Attendance saved successfully";
+buttons.forEach(b=>b.disabled=false);
+if(!error)loadRecords();
+}
+
+async function loadRecords(){
+const {data,error}=await db.from("attendance_entries")
+.select("session_slot,attendance_time,recorded_at,teachers(name)")
+.order("recorded_at",{ascending:false}).limit(30);
+if(error){records.textContent=error.message;return;}
+records.replaceChildren();
+if(!data.length){records.textContent="No attendance yet";return;}
+data.forEach(r=>{
+const div=document.createElement("div");
+div.className="record";
+const name=document.createElement("strong");
+name.textContent=r.teachers?.name||"Teacher";
+const detail=document.createElement("div");
+detail.textContent=r.session_slot+" | Selected: "+r.attendance_time;
+const submitted=document.createElement("small");
+submitted.textContent="Submitted: "+new Date(r.recorded_at).toLocaleString("en-IN",{timeZone:"Asia/Kolkata"});
+div.append(name,detail,submitted);
+records.appendChild(div);
+});
+}
+loadTeachers();
+loadRecords();
+</script>
+</body>
+</html>
